@@ -1,0 +1,45 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: upi-csr-approver
+  namespace: openshift-cluster-machine-approver
+spec:
+  jobTemplate:
+    metadata:
+      name: upi-csr-approver
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+              SLEEP_TIME=60
+              while true ;
+              do
+                  PENDING_CSR=`oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}'`
+                  if [ -z "$PENDING_CSR" ]; then
+                      echo "// No Pending CSRs."
+                      break
+                  else
+                      echo "// Approving Pending CSRs."
+                      oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}' | xargs oc adm certificate approve
+                      echo "// Sleep $SLEEP_TIME"
+                      sleep $SLEEP_TIME
+                  fi
+              done
+            image: registry.redhat.io/openshift4/ose-cli:latest # change the image in disconnected environment 
+            imagePullPolicy: IfNotPresent
+            name: upi-csr-approver
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: OnFailure
+          serviceAccount: machine-approver-sa
+          serviceAccountName: machine-approver-sa
+          terminationGracePeriodSeconds: 30
+  schedule: '0 0 * * *' # change the schedule time
+  suspend: false
+status: {}
